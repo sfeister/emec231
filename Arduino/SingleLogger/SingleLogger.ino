@@ -31,7 +31,8 @@
       3. Chrono example: basicMetro.ino  https://github.com/SofaPirate/Chrono/blob/master/examples/basicMetro/basicMetro.ino
 */
 
-#define LED_PIN 2
+#define BTN_PIN 2 // optional button
+#define REC_PIN 8 // optional recording is live indicator
 
 #include <SPI.h> // For writing to the SD card
 #include <SD.h> // For writing to the SD card
@@ -46,7 +47,7 @@ int ndots = 0; // printout of dots
 const String sep = ",";
 
 // Initialize LED-related variables
-uint8_t led_status; // actually will be boolean
+uint8_t btn_status; // actually will be boolean
 
 // Initialize SD-related variables
 const int chipSelect = 4;
@@ -61,6 +62,7 @@ imu::Quaternion myQuaternion;
 
 // Initialize timer-related variables
 Chrono myChrono; 
+Chrono heartbeatChrono; 
 unsigned long deltat;
 uint32_t mymillis;
 
@@ -68,7 +70,8 @@ void  setup(){
   myChrono.restart(); // restart / start timer
 
   /** Initialize LED Pin for camera synchronization **/
-  pinMode(LED_PIN, INPUT);
+  pinMode(BTN_PIN, INPUT);
+  pinMode(REC_PIN, OUTPUT);
 
   /** Initialize serial communication over USB (optional for debugging) **/
   Serial.begin(115200);
@@ -110,7 +113,10 @@ void  setup(){
 
   else {
     Serial.println("error opening datalog.txt");
-  }
+    Serial.println("Fix, then reset Arduino to restart datalogging");
+    // don't do anything more:
+    while (1);
+}
 
   while (!myChrono.hasPassed(2000)); // wait an even two seconds to start data logging
   myChrono.restart();  // restart the timer
@@ -130,7 +136,7 @@ void loop(){
     //bno.getEvent(&accelerometerData, Adafruit_BNO055::VECTOR_ACCELEROMETER);
     bno.getEvent(&gravityData, Adafruit_BNO055::VECTOR_GRAVITY);
     myQuaternion = bno.getQuat();
-    led_status = digitalRead(LED_PIN);
+    btn_status = digitalRead(BTN_PIN);
 
     AcX=linearAccelData.acceleration.x;
     AcY=linearAccelData.acceleration.y;
@@ -154,7 +160,7 @@ void loop(){
     dataFile = SD.open("datalog.txt", FILE_WRITE);
     if (dataFile) {
       //sprintf(buffer,"%d,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f",deltat,AcX,AcY,AcZ,GravX,GravY,GravZ,OrX,OrY,OrZ,GyX,GyY,GyZ);
-      dataFile.print(led_status);
+      dataFile.print(btn_status);
       dataFile.print(sep);
       dataFile.print(mymillis);
       dataFile.print(sep);
@@ -200,6 +206,11 @@ void loop(){
         Serial.println("");
         ndots = 0;
       }
+      if (heartbeatChrono.hasPassed(500) & abs(AcX) > 0.00001) { // check both for the time elapsed and we aren't saving all zeros
+        heartbeatChrono.restart();
+        digitalWrite(REC_PIN, !digitalRead(REC_PIN)); // toggle heartbeat LED
+      }
+
     }
     // if the file isn't open (it really should be), print a debugging error:
     else {
